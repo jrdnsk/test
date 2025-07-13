@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Drogerie</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        padding: 2em;
+        background: #f9f9f9;
+      }
+      ul {
+        list-style-type: none;
+        padding-left: 0;
+      }
+      li {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0.6em;
+        font-size: 1.1em;
+      }
+      input[type="checkbox"] {
+        transform: scale(1.3);
+        margin-right: 0.6em;
+      }
+      .checked {
+        text-decoration: line-through;
+        color: gray;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>🛒 Drogerie-Liste</h2>
+    <ul>
+      <li><input type="checkbox" id="item-0"><span>Klopapier</span></li>
+      <li><input type="checkbox" id="item-1"><span>Elmex Sensitiv</span></li>
+      <li><input type="checkbox" id="item-2"><span>Hidro Fugal Spray</span></li>
+      <li><input type="checkbox" id="item-3"><span>Windeln</span></li>
+      <li><input type="checkbox" id="item-4"><span>Mixa Panthenol comfort Creme (Rossmann)</span></li>
+      <li><input type="checkbox" id="item-5"><span>Vollwaschmittel</span></li>
+      <li><input type="checkbox" id="item-6"><span>Natron</span></li>
+    </ul>
+
+    <script>
+      // IDs durchgehen
+      const items = document.querySelectorAll('input[type="checkbox"]');
+
+      items.forEach((box, index) => {
+        const label = box.nextElementSibling;
+        const storageKey = 'todo-' + index;
+
+        // Lade gespeicherten Zustand
+        const saved = localStorage.getItem(storageKey);
+        if (saved === 'true') {
+          box.checked = true;
+          label.classList.add('checked');
+        }
+
+        // On click: speichern und optisch markieren
+        box.addEventListener('change', () => {
+          localStorage.setItem(storageKey, box.checked);
+          label.classList.toggle('checked', box.checked);
+        });
+      });
+    </script>
+  </body>
+</html>
