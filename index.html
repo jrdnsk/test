@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Mini Board">
+<title>Mini Board</title>
+<style>
+  /* ---------------------------------------------------------
+     Kompatibilitaets-Hinweis: gebaut fuer iOS 9.3.5 (iPad mini 1).
+     Kein fetch(), kein CSS Grid, keine CSS-Variablen, kein ES6 -
+     nur was Safari 9 sicher kann: Flexbox, XMLHttpRequest, localStorage.
+     --------------------------------------------------------- */
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #DCE3DD;
+    font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: #23312C;
+    -webkit-text-size-adjust: 100%;
+  }
+  body { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; }
+
+  /* ---- Ordner-Tabs oben ---- */
+  .tabbar {
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-box-orient: horizontal; -webkit-flex-direction: row; flex-direction: row;
+    background: #23312C;
+    padding: 14px 10px 0 10px;
+  }
+  .tab {
+    -webkit-box-flex: 1; -webkit-flex: 1; flex: 1;
+    text-align: center;
+    padding: 14px 6px;
+    margin-right: 6px;
+    background: #33453D;
+    color: #B9C4BC;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 15px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-radius: 8px 8px 0 0;
+    border: none;
+  }
+  .tab:last-child { margin-right: 0; }
+  .tab.active {
+    background: #DCE3DD;
+    color: #23312C;
+    font-weight: bold;
+  }
+
+  .page { display: none; padding: 16px; -webkit-overflow-scrolling: touch; overflow-y: auto; -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; }
+  .page.active { display: block; }
+
+  /* ---- "Etikett"-Karten: das Signature-Element ---- */
+  .card {
+    background: #F3F1E7;
+    border: 1px solid #C6CDC3;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    position: relative;
+    padding: 18px 16px 16px 16px;
+  }
+  .label-tab {
+    position: absolute;
+    top: -13px; left: 14px;
+    background: #C1443C;
+    color: #FBF7EC;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 4px 10px 4px 10px;
+    border-radius: 3px;
+  }
+  .label-tab.alt { background: #B98A2E; }
+  .label-tab .rivet {
+    display: inline-block; width: 4px; height: 4px; border-radius: 50%;
+    background: #FBF7EC; opacity: 0.55; margin-right: 6px;
+  }
+
+  h1 { font-size: 20px; margin: 0 0 12px 2px; }
+  p.hint { color: #5B685F; font-size: 13px; margin: 4px 2px 14px 2px; }
+
+  /* ---- Wetter ---- */
+  .weather-main { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+  .weather-icon { font-size: 54px; margin-right: 16px; -webkit-flex-shrink: 0; flex-shrink: 0; }
+  .weather-temp { font-size: 40px; font-weight: bold; line-height: 1; }
+  .weather-desc { font-size: 15px; color: #45524B; margin-top: 4px; }
+  .weather-sub { margin-top: 14px; font-size: 14px; color: #45524B; }
+  .weather-loc { font-size: 13px; color: #7C877F; margin-top: 10px; }
+  .btn {
+    display: inline-block; margin-top: 12px;
+    background: #23312C; color: #F3F1E7;
+    border: none; border-radius: 6px;
+    padding: 10px 14px; font-size: 14px; font-family: inherit;
+  }
+  .btn.secondary { background: #C6CDC3; color: #23312C; }
+  .row-inline { display: -webkit-box; display: -webkit-flex; display: flex; margin-top: 8px; }
+  .row-inline input {
+    -webkit-box-flex: 1; -webkit-flex: 1; flex: 1;
+    padding: 10px; font-size: 15px; border: 1px solid #C6CDC3; border-radius: 6px 0 0 6px;
+    border-right: none;
+  }
+  .row-inline .btn { border-radius: 0 6px 6px 0; margin-top: 0; }
+
+  /* ---- Termine ---- */
+  .day-group { margin-bottom: 14px; }
+  .day-group h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+    color: #7C877F; margin: 0 0 6px 2px; font-weight: normal;
+  }
+  .event-item, .list-item {
+    background: #FBF9F2; border: 1px solid #E4E1D3; border-radius: 6px;
+    padding: 10px 12px; margin-bottom: 8px;
+    display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;
+  }
+  .event-time {
+    font-family: "Courier New", Courier, monospace; font-size: 14px;
+    background: #23312C; color: #F3F1E7; border-radius: 4px;
+    padding: 3px 6px; margin-right: 10px; -webkit-flex-shrink: 0; flex-shrink: 0;
+  }
+  .event-title, .item-text { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; font-size: 15px; }
+  .del-btn {
+    background: none; border: none; color: #A44038; font-size: 20px; padding: 0 4px;
+  }
+  .event-item.google { border-left: 4px solid #4A7A6B; padding-left: 9px; }
+  .add-form { margin-top: 10px; }
+  .add-form input, .add-form select {
+    width: 100%; padding: 10px; margin-bottom: 8px; font-size: 15px;
+    border: 1px solid #C6CDC3; border-radius: 6px;
+  }
+
+  /* ---- Aufgaben & Einkauf ---- */
+  .cols { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+  .col { -webkit-box-flex: 1; -webkit-flex: 1 1 260px; flex: 1 1 260px; min-width: 260px; margin-right: 12px; }
+  .col:last-child { margin-right: 0; }
+  .item-text.done { text-decoration: line-through; color: #96A099; }
+  .chk {
+    width: 22px; height: 22px; margin-right: 10px; -webkit-flex-shrink: 0; flex-shrink: 0;
+    border: 2px solid #45524B; border-radius: 4px; background: none;
+  }
+  .chk.checked { background: #45524B; }
+  .empty-msg { color: #96A099; font-size: 14px; padding: 6px 2px; }
+</style>
+</head>
+<body>
+
+  <div class="tabbar">
+    <button class="tab active" data-page="wetter">Wetter</button>
+    <button class="tab" data-page="termine">Termine</button>
+    <button class="tab" data-page="aufgaben">Aufgaben</button>
+  </div>
+
+  <!-- ============ WETTER ============ -->
+  <div class="page active" id="page-wetter">
+    <h1>Heute</h1>
+    <div class="card">
+      <span class="label-tab"><span class="rivet"></span>Wetter</span>
+      <div id="weatherContent">
+        <p class="hint">Lade Wetterdaten&hellip;</p>
+      </div>
+      <div class="weather-loc" id="weatherLoc"></div>
+      <button class="btn secondary" id="btnChangeLoc">Ort &auml;ndern</button>
+      <button class="btn secondary" id="btnRefresh">Aktualisieren</button>
+      <div class="row-inline" id="locForm" style="display:none;">
+        <input type="text" id="locInput" placeholder="Stadt oder Adresse, z.B. Wien">
+        <button class="btn" id="locSubmit">OK</button>
+      </div>
+      <p class="hint" id="weatherError" style="display:none; color:#A44038;"></p>
+    </div>
+    <p class="hint">Daten von Open-Meteo (kostenlos, ohne Anmeldung). Der Standort wird nur lokal auf diesem Ger&auml;t gespeichert.</p>
+  </div>
+
+  <!-- ============ TERMINE ============ -->
+  <div class="page" id="page-termine">
+    <h1>Termine</h1>
+    <div class="card">
+      <span class="label-tab alt"><span class="rivet"></span>Google Kalender</span>
+      <p class="hint" id="gcalStatus" style="margin-top:0;">Nicht verbunden.</p>
+      <div class="row-inline" id="gcalForm">
+        <input type="text" id="gcalInput" placeholder="Geheime iCal-Adresse einf&uuml;gen">
+        <button class="btn" id="gcalConnect">Verbinden</button>
+      </div>
+      <button class="btn secondary" id="gcalRefresh" style="display:none;">Aktualisieren</button>
+      <button class="btn secondary" id="gcalDisconnect" style="display:none;">Trennen</button>
+      <p class="hint">So findest du die Adresse: Google Kalender (Web) &rarr; Einstellungen &rarr; deinen Kalender ausw&auml;hlen &rarr; "Geheime Adresse im iCal-Format". Sie wird lokal gespeichert und beim Abruf einmal an einen &ouml;ffentlichen Proxy (allorigins.win) weitergegeben, da Google selbst keine direkten Abrufe aus dem Browser erlaubt.</p>
+    </div>
+    <div class="card">
+      <span class="label-tab"><span class="rivet"></span>Diese Woche</span>
+      <div id="eventList"></div>
+    </div>
+  </div>
+
+  <!-- ============ AUFGABEN & EINKAUF ============ -->
+  <div class="page" id="page-aufgaben">
+    <h1>Aufgaben &amp; Einkauf</h1>
+    <div class="cols">
+      <div class="col">
+        <div class="card">
+          <span class="label-tab"><span class="rivet"></span>To Do</span>
+          <div id="todoList"></div>
+          <div class="row-inline">
+            <input type="text" id="todoInput" placeholder="Neue Aufgabe&hellip;">
+            <button class="btn" id="todoAdd">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card">
+          <span class="label-tab alt"><span class="rivet"></span>Einkaufsliste</span>
+          <div id="shopList"></div>
+          <div class="row-inline">
+            <input type="text" id="shopInput" placeholder="Neuer Artikel&hellip;">
+            <button class="btn" id="shopAdd">+</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- Tabs ---------------- */
+  var tabs = document.querySelectorAll(".tab");
+  for (var i = 0; i < tabs.length; i++) {
+    tabs[i].addEventListener("click", function (e) {
+      var target = e.currentTarget.getAttribute("data-page");
+      for (var j = 0; j < tabs.length; j++) { tabs[j].className = "tab"; }
+      e.currentTarget.className = "tab active";
+      var pages = document.querySelectorAll(".page");
+      for (var k = 0; k < pages.length; k++) { pages[k].className = "page"; }
+      document.getElementById("page-" + target).className = "page active";
+    });
+  }
+
+  /* ---------------- Storage Helper ---------------- */
+  function load(key, fallback) {
+    try {
+      var raw = window.localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) { return fallback; }
+  }
+  function save(key, value) {
+    try { window.localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+  }
+
+  /* ==================================================
+     WETTER
+     ================================================== */
+  var weatherContent = document.getElementById("weatherContent");
+  var weatherLoc = document.getElementById("weatherLoc");
+  var weatherError = document.getElementById("weatherError");
+  var locForm = document.getElementById("locForm");
+
+  var WEATHER_CODES = {
+    0: ["Klarer Himmel", "\u2600\uFE0F"],
+    1: ["Meist heiter", "\uD83C\uDF24"],
+    2: ["Teilweise bew\u00F6lkt", "\u26C5"],
+    3: ["Bedeckt", "\u2601\uFE0F"],
+    45: ["Nebel", "\uD83C\uDF2B"],
+    48: ["Nebel mit Reif", "\uD83C\uDF2B"],
+    51: ["Leichter Nieselregen", "\uD83C\uDF26"],
+    53: ["Nieselregen", "\uD83C\uDF26"],
+    55: ["Starker Nieselregen", "\uD83C\uDF27"],
+    61: ["Leichter Regen", "\uD83C\uDF27"],
+    63: ["Regen", "\uD83C\uDF27"],
+    65: ["Starker Regen", "\u26C8\uFE0F"],
+    71: ["Leichter Schneefall", "\uD83C\uDF28"],
+    73: ["Schneefall", "\uD83C\uDF28"],
+    75: ["Starker Schneefall", "\u2744\uFE0F"],
+    80: ["Regenschauer", "\uD83C\uDF26"],
+    81: ["Regenschauer", "\uD83C\uDF27"],
+    82: ["Heftige Regenschauer", "\u26C8\uFE0F"],
+    95: ["Gewitter", "\u26C8\uFE0F"]
+  };
+  function describeCode(code) {
+    return WEATHER_CODES[code] || ["Unbekannt", "\u2753"];
+  }
+
+  function xhrGet(url, onOk, onErr) {
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", url, true);
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { onOk(JSON.parse(xhr.responseText)); }
+          catch (e) { onErr("Antwort konnte nicht gelesen werden."); }
+        } else {
+          onErr("Server antwortet nicht (Status " + xhr.status + ").");
+        }
+      }
+    };
+    xhr.onerror = function () { onErr("Keine Verbindung zum Internet."); };
+    xhr.send();
+  }
+
+  function renderWeather(data, placeName) {
+    var cw = data.current_weather;
+    var info = describeCode(cw.weathercode);
+    var maxT = data.daily && data.daily.temperature_2m_max ? Math.round(data.daily.temperature_2m_max[0]) : null;
+    var minT = data.daily && data.daily.temperature_2m_min ? Math.round(data.daily.temperature_2m_min[0]) : null;
+    var html = '';
+    html += '<div class="weather-main">';
+    html += '  <div class="weather-icon">' + info[1] + '</div>';
+    html += '  <div>';
+    html += '    <div class="weather-temp">' + Math.round(cw.temperature) + '\u00B0C</div>';
+    html += '    <div class="weather-desc">' + info[0] + '</div>';
+    html += '  </div>';
+    html += '</div>';
+    html += '<div class="weather-sub">';
+    if (minT !== null && maxT !== null) { html += 'Heute: ' + minT + '\u00B0 / ' + maxT + '\u00B0 &middot; '; }
+    html += 'Wind ' + Math.round(cw.windspeed) + ' km/h';
+    html += '</div>';
+    weatherContent.innerHTML = html;
+    weatherLoc.textContent = placeName ? ('Standort: ' + placeName) : '';
+    weatherError.style.display = 'none';
+  }
+
+  function fetchWeather(lat, lon, placeName) {
+    weatherContent.innerHTML = '<p class="hint">Lade Wetterdaten&hellip;</p>';
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon +
+      '&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=auto';
+    xhrGet(url, function (data) {
+      renderWeather(data, placeName);
+    }, function (msg) {
+      weatherContent.innerHTML = '<p class="hint">Wetter konnte nicht geladen werden.</p>';
+      weatherError.textContent = msg;
+      weatherError.style.display = 'block';
+    });
+  }
+
+  function geocodeAndFetch(name) {
+    weatherContent.innerHTML = '<p class="hint">Suche Ort&hellip;</p>';
+    var url = 'https://geocoding-api.open-meteo.com/v1/search?count=1&language=de&name=' + encodeURIComponent(name);
+    xhrGet(url, function (data) {
+      if (data.results && data.results.length > 0) {
+        var r = data.results[0];
+        var label = r.name + (r.admin1 ? (', ' + r.admin1) : '') + (r.country ? (', ' + r.country) : '');
+        save('mb_location', { lat: r.latitude, lon: r.longitude, name: label });
+        fetchWeather(r.latitude, r.longitude, label);
+      } else {
+        weatherContent.innerHTML = '<p class="hint">Ort nicht gefunden.</p>';
+        weatherError.textContent = 'Bitte anderen Ort oder genauere Adresse eingeben.';
+        weatherError.style.display = 'block';
+      }
+    }, function (msg) {
+      weatherContent.innerHTML = '<p class="hint">Suche fehlgeschlagen.</p>';
+      weatherError.textContent = msg;
+      weatherError.style.display = 'block';
+    });
+  }
+
+  function initWeather() {
+    var saved = load('mb_location', null);
+    if (saved) {
+      fetchWeather(saved.lat, saved.lon, saved.name);
+      return;
+    }
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(function (pos) {
+        var lat = pos.coords.latitude, lon = pos.coords.longitude;
+        save('mb_location', { lat: lat, lon: lon, name: null });
+        fetchWeather(lat, lon, null);
+      }, function () {
+        weatherContent.innerHTML = '<p class="hint">Standort nicht verf&uuml;gbar. Bitte Ort manuell eingeben.</p>';
+        locForm.style.display = 'flex';
+      }, { timeout: 8000 });
+    } else {
+      weatherContent.innerHTML = '<p class="hint">Standortbestimmung nicht unterst&uuml;tzt. Bitte Ort manuell eingeben.</p>';
+      locForm.style.display = 'flex';
+    }
+  }
+
+  document.getElementById("btnChangeLoc").addEventListener("click", function () {
+    locForm.style.display = (locForm.style.display === 'flex') ? 'none' : 'flex';
+  });
+  document.getElementById("btnRefresh").addEventListener("click", function () {
+    var saved = load('mb_location', null);
+    if (saved) { fetchWeather(saved.lat, saved.lon, saved.name); } else { initWeather(); }
+  });
+  document.getElementById("locSubmit").addEventListener("click", function () {
+    var val = document.getElementById("locInput").value.trim();
+    if (val.length > 0) { geocodeAndFetch(val); locForm.style.display = 'none'; }
+  });
+
+  initWeather();
+
+  /* ==================================================
+     TERMINE
+     ================================================== */
+  var eventList = document.getElementById("eventList");
+  var WEEKDAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function dayLabel(dateStr) {
+    var today = todayStr();
+    var d = new Date(dateStr + 'T00:00:00');
+    var t = new Date(today + 'T00:00:00');
+    var diffDays = Math.round((d - t) / 86400000);
+    if (diffDays === 0) return 'Heute';
+    if (diffDays === 1) return 'Morgen';
+    if (diffDays > 1 && diffDays < 7) return WEEKDAYS[d.getDay()];
+    var parts = dateStr.split('-');
+    return parts[2] + '.' + parts[1] + '.';
+  }
+
+  function renderEvents() {
+    var events = googleEvents.filter(function (ev) { return ev.date >= todayStr(); });
+    events.sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return (a.time || '') < (b.time || '') ? -1 : 1;
+    });
+
+    if (events.length === 0) {
+      var msg = load('mb_gcal_url', null)
+        ? 'Keine anstehenden Termine in den n\u00E4chsten 14 Tagen.'
+        : 'Noch kein Kalender verbunden. Trage oben deine geheime iCal-Adresse ein.';
+      eventList.innerHTML = '<p class="empty-msg">' + msg + '</p>';
+      return;
+    }
+    var groups = [];
+    var groupsByDate = {};
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      if (!groupsByDate[ev.date]) {
+        groupsByDate[ev.date] = [];
+        groups.push(ev.date);
+      }
+      groupsByDate[ev.date].push(ev);
+    }
+    var html = '';
+    for (var g = 0; g < groups.length; g++) {
+      var date = groups[g];
+      html += '<div class="day-group"><h2>' + dayLabel(date) + '</h2>';
+      var evs = groupsByDate[date];
+      for (var j = 0; j < evs.length; j++) {
+        html += '<div class="event-item google">';
+        if (evs[j].time) { html += '<span class="event-time">' + evs[j].time + '</span>'; }
+        html += '<span class="event-title">' + escapeHtml(evs[j].title) + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    eventList.innerHTML = html;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /* ---------------- Google Kalender (iCal) ---------------- */
+  var GCAL_PROXY = 'https://api.allorigins.win/raw?url=';
+  var googleEvents = [];
+  var gcalStatus = document.getElementById('gcalStatus');
+  var gcalForm = document.getElementById('gcalForm');
+  var gcalRefreshBtn = document.getElementById('gcalRefresh');
+  var gcalDisconnectBtn = document.getElementById('gcalDisconnect');
+
+  function xhrGetText(url, onOk, onErr) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        if (xhr.status >= 200 && xhr.status < 300) { onOk(xhr.responseText); }
+        else { onErr('Kalender konnte nicht geladen werden (Status ' + xhr.status + ').'); }
+      }
+    };
+    xhr.onerror = function () { onErr('Keine Verbindung zum Kalender-Proxy.'); };
+    xhr.send();
+  }
+
+  function addDays(d, n) {
+    var r = new Date(d.getTime());
+    r.setDate(r.getDate() + n);
+    return r;
+  }
+
+  function parseICSDate(str) {
+    var y = parseInt(str.substr(0, 4), 10);
+    var mo = parseInt(str.substr(4, 2), 10);
+    var d = parseInt(str.substr(6, 2), 10);
+    var timeStr = null, dateObj;
+    if (str.length > 8 && str.charAt(8) === 'T') {
+      var hh = parseInt(str.substr(9, 2), 10);
+      var mi = parseInt(str.substr(11, 2), 10);
+      var ss = parseInt(str.substr(13, 2), 10) || 0;
+      if (str.charAt(str.length - 1) === 'Z') {
+        dateObj = new Date(Date.UTC(y, mo - 1, d, hh, mi, ss));
+        timeStr = pad(dateObj.getHours()) + ':' + pad(dateObj.getMinutes());
+      } else {
+        dateObj = new Date(y, mo - 1, d, hh, mi, ss);
+        timeStr = pad(hh) + ':' + pad(mi);
+      }
+    } else {
+      dateObj = new Date(y, mo - 1, d);
+    }
+    var dateStr = dateObj.getFullYear() + '-' + pad(dateObj.getMonth() + 1) + '-' + pad(dateObj.getDate());
+    return { date: dateStr, time: timeStr, obj: dateObj };
+  }
+
+  function parseICS(text) {
+    var lines = text.split(/\r\n|\n|\r/);
+    var unfolded = [];
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].length > 0 && (lines[i].charAt(0) === ' ' || lines[i].charAt(0) === '\t') && unfolded.length > 0) {
+        unfolded[unfolded.length - 1] += lines[i].substring(1);
+      } else {
+        unfolded.push(lines[i]);
+      }
+    }
+    var events = [];
+    var cur = null;
+    for (var j = 0; j < unfolded.length; j++) {
+      var line = unfolded[j];
+      if (line === 'BEGIN:VEVENT') { cur = {}; }
+      else if (line === 'END:VEVENT') { if (cur) { events.push(cur); } cur = null; }
+      else if (cur) {
+        var idx = line.indexOf(':');
+        if (idx === -1) { continue; }
+        var rawKey = line.substring(0, idx);
+        var value = line.substring(idx + 1);
+        var key = rawKey.split(';')[0];
+        if (key === 'SUMMARY') { cur.title = value.replace(/\\,/g, ',').replace(/\\n/gi, ' ').replace(/\\\\/g, '\\'); }
+        else if (key === 'DTSTART') { cur.dtstart = value; }
+        else if (key === 'RRULE') { cur.rrule = value; }
+        else if (key === 'UID') { cur.uid = value; }
+      }
+    }
+    return events;
+  }
+
+  function expandRecurring(ev, rangeStartObj, rangeEndObj) {
+    var startInfo = parseICSDate(ev.dtstart);
+    var occurrences = [];
+    if (!ev.rrule) {
+      if (startInfo.obj >= rangeStartObj && startInfo.obj <= rangeEndObj) {
+        occurrences.push({ date: startInfo.date, time: startInfo.time });
+      }
+      return occurrences;
+    }
+    var parts = ev.rrule.split(';');
+    var freq = null, interval = 1, until = null, count = null, byday = null;
+    for (var i = 0; i < parts.length; i++) {
+      var kv = parts[i].split('=');
+      if (kv[0] === 'FREQ') { freq = kv[1]; }
+      else if (kv[0] === 'INTERVAL') { interval = parseInt(kv[1], 10) || 1; }
+      else if (kv[0] === 'UNTIL') { until = parseICSDate(kv[1]).obj; }
+      else if (kv[0] === 'COUNT') { count = parseInt(kv[1], 10); }
+      else if (kv[0] === 'BYDAY') { byday = kv[1].split(','); }
+    }
+    /* Nur taegliche/woechentliche Wiederholungen werden hier ausgerechnet - reicht fuer
+       die meisten Arbeits-/Serientermine. Monatlich/jaehrlich zeigt nur den Ursprungstermin. */
+    if (freq !== 'DAILY' && freq !== 'WEEKLY') {
+      if (startInfo.obj >= rangeStartObj && startInfo.obj <= rangeEndObj) {
+        occurrences.push({ date: startInfo.date, time: startInfo.time });
+      }
+      return occurrences;
+    }
+    var DAY_MAP = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+    var cursor = new Date(startInfo.obj.getFullYear(), startInfo.obj.getMonth(), startInfo.obj.getDate());
+    var startDay = new Date(startInfo.obj.getFullYear(), startInfo.obj.getMonth(), startInfo.obj.getDate());
+    var generated = 0, iter = 0;
+    while (cursor <= rangeEndObj && iter < 730) {
+      iter++;
+      if (until && cursor > until) { break; }
+      if (count && generated >= count) { break; }
+      var dayIndex = Math.round((cursor - startDay) / 86400000);
+      var include = false;
+      if (freq === 'DAILY') {
+        include = (dayIndex >= 0 && dayIndex % interval === 0);
+      } else if (freq === 'WEEKLY') {
+        var weekIndex = Math.floor(dayIndex / 7);
+        var weekOk = (dayIndex >= 0 && weekIndex % interval === 0);
+        if (byday) {
+          for (var b = 0; b < byday.length; b++) { if (DAY_MAP[byday[b]] === cursor.getDay() && weekOk) { include = true; } }
+        } else {
+          include = weekOk && cursor.getDay() === startDay.getDay();
+        }
+      }
+      if (include) {
+        generated++;
+        if (cursor >= rangeStartObj && cursor <= rangeEndObj) {
+          occurrences.push({
+            date: cursor.getFullYear() + '-' + pad(cursor.getMonth() + 1) + '-' + pad(cursor.getDate()),
+            time: startInfo.time
+          });
+        }
+      }
+      cursor = addDays(cursor, 1);
+    }
+    return occurrences;
+  }
+
+  function refreshGoogleEvents() {
+    var url = load('mb_gcal_url', null);
+    if (!url) { return; }
+    gcalStatus.textContent = 'Aktualisiere\u2026';
+    var proxied = GCAL_PROXY + encodeURIComponent(url);
+    xhrGetText(proxied, function (text) {
+      try {
+        var raw = parseICS(text);
+        var today0 = new Date();
+        today0.setHours(0, 0, 0, 0);
+        var rangeEnd = addDays(today0, 13);
+        var flat = [];
+        for (var i = 0; i < raw.length; i++) {
+          if (!raw[i].dtstart || !raw[i].title) { continue; }
+          var occs = expandRecurring(raw[i], today0, rangeEnd);
+          for (var j = 0; j < occs.length; j++) {
+            flat.push({
+              id: 'g_' + (raw[i].uid || i) + '_' + occs[j].date + (occs[j].time || ''),
+              title: raw[i].title, date: occs[j].date, time: occs[j].time, source: 'google'
+            });
+          }
+        }
+        googleEvents = flat;
+        gcalStatus.textContent = flat.length + ' Termine aus Google Kalender geladen (naechste 14 Tage).';
+        renderEvents();
+      } catch (e) {
+        gcalStatus.textContent = 'Kalenderdaten konnten nicht gelesen werden.';
+      }
+    }, function (msg) {
+      gcalStatus.textContent = msg;
+    });
+  }
+
+  document.getElementById('gcalConnect').addEventListener('click', function () {
+    var val = document.getElementById('gcalInput').value.trim();
+    if (val === '') { return; }
+    save('mb_gcal_url', val);
+    gcalForm.style.display = 'none';
+    gcalRefreshBtn.style.display = 'inline-block';
+    gcalDisconnectBtn.style.display = 'inline-block';
+    refreshGoogleEvents();
+  });
+  document.getElementById('gcalRefresh').addEventListener('click', refreshGoogleEvents);
+  document.getElementById('gcalDisconnect').addEventListener('click', function () {
+    window.localStorage.removeItem('mb_gcal_url');
+    googleEvents = [];
+    gcalForm.style.display = 'flex';
+    gcalRefreshBtn.style.display = 'none';
+    gcalDisconnectBtn.style.display = 'none';
+    gcalStatus.textContent = 'Nicht verbunden.';
+    renderEvents();
+  });
+
+  (function initGcal() {
+    var url = load('mb_gcal_url', null);
+    if (url) {
+      gcalForm.style.display = 'none';
+      gcalRefreshBtn.style.display = 'inline-block';
+      gcalDisconnectBtn.style.display = 'inline-block';
+      refreshGoogleEvents();
+    }
+  })();
+
+  renderEvents();
+
+  /* ==================================================
+     AUFGABEN & EINKAUF
+     ================================================== */
+  function setupList(storageKey, listElId, inputElId, addBtnId) {
+    var listEl = document.getElementById(listElId);
+
+    function render() {
+      var items = load(storageKey, []);
+      if (items.length === 0) {
+        listEl.innerHTML = '<p class="empty-msg">Noch keine Eintr&auml;ge.</p>';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        html += '<div class="list-item">';
+        html += '<button class="chk' + (it.done ? ' checked' : '') + '" data-id="' + it.id + '"></button>';
+        html += '<span class="item-text' + (it.done ? ' done' : '') + '">' + escapeHtml(it.text) + '</span>';
+        html += '<button class="del-btn" data-id="' + it.id + '">&times;</button>';
+        html += '</div>';
+      }
+      listEl.innerHTML = html;
+
+      var chks = listEl.querySelectorAll(".chk");
+      for (var c = 0; c < chks.length; c++) {
+        chks[c].addEventListener("click", function (e) {
+          var id = e.currentTarget.getAttribute("data-id");
+          var arr = load(storageKey, []);
+          for (var j = 0; j < arr.length; j++) {
+            if (String(arr[j].id) === String(id)) { arr[j].done = !arr[j].done; }
+          }
+          save(storageKey, arr);
+          render();
+        });
+      }
+      var dels = listEl.querySelectorAll(".del-btn");
+      for (var d = 0; d < dels.length; d++) {
+        dels[d].addEventListener("click", function (e) {
+          var id = e.currentTarget.getAttribute("data-id");
+          var arr = load(storageKey, []);
+          arr = arr.filter(function (it2) { return String(it2.id) !== String(id); });
+          save(storageKey, arr);
+          render();
+        });
+      }
+    }
+
+    document.getElementById(addBtnId).addEventListener("click", function () {
+      var input = document.getElementById(inputElId);
+      var val = input.value.trim();
+      if (val === '') { return; }
+      var arr = load(storageKey, []);
+      arr.push({ id: Date.now() + Math.random(), text: val, done: false });
+      save(storageKey, arr);
+      input.value = '';
+      render();
+    });
+
+    render();
+  }
+
+  setupList('mb_todos', 'todoList', 'todoInput', 'todoAdd');
+  setupList('mb_shopping', 'shopList', 'shopInput', 'shopAdd');
+
+})();
+</script>
+</body>
+</html>
