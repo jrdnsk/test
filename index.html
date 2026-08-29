@@ -292,6 +292,12 @@
 
   var CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
+  var CORS_PROXY_BUILDERS = [
+    function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+    function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
+    function (u) { return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); }
+  ];
+
   function xhrGet(url, onOk, onErr) {
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url, true);
@@ -309,15 +315,25 @@
     xhr.send();
   }
 
-  /* Versucht zuerst direkt, bei Fehlschlag automatisch ueber den CORS-Proxy.
-     So merkt man nicht nur, DASS ein direkter Abruf scheitert, sondern die
-     App repariert sich in dem Fall gleich selbst. */
+  /* Versucht zuerst direkt, dann der Reihe nach mehrere CORS-Proxys, bis einer klappt.
+     So merkt man nicht nur, DASS ein Abruf scheitert, sondern die App repariert
+     sich in dem Fall automatisch selbst - kostenlose Proxys sind oft instabil. */
   function xhrGetJson(url, onOk, onFinalErr) {
-    xhrGet(url, onOk, function (directMsg) {
-      var proxied = CORS_PROXY + encodeURIComponent(url);
-      xhrGet(proxied, onOk, function (proxyMsg) {
-        onFinalErr('Direkt: ' + directMsg + ' | Ueber Proxy: ' + proxyMsg);
+    var messages = [];
+    function tryProxy(index) {
+      if (index >= CORS_PROXY_BUILDERS.length) {
+        onFinalErr(messages.join(' | '));
+        return;
+      }
+      var proxied = CORS_PROXY_BUILDERS[index](url);
+      xhrGet(proxied, onOk, function (msg) {
+        messages.push('Proxy ' + (index + 1) + ': ' + msg);
+        tryProxy(index + 1);
       });
+    }
+    xhrGet(url, onOk, function (directMsg) {
+      messages.push('Direkt: ' + directMsg);
+      tryProxy(0);
     });
   }
 
