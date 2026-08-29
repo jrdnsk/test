@@ -91,6 +91,21 @@
   .weather-desc { font-size: 15px; color: #45524B; margin-top: 4px; }
   .weather-sub { margin-top: 14px; font-size: 14px; color: #45524B; }
   .weather-loc { font-size: 13px; color: #7C877F; margin-top: 10px; }
+  .hourly-scroll {
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-overflow-scrolling: touch; overflow-x: auto;
+    margin-top: 14px; padding-bottom: 4px;
+  }
+  .hour-card {
+    -webkit-box-flex: 0; -webkit-flex: 0 0 auto; flex: 0 0 auto;
+    text-align: center;
+    background: #FBF9F2; border: 1px solid #E4E1D3; border-radius: 6px;
+    padding: 8px 10px; margin-right: 8px; min-width: 56px;
+  }
+  .hour-time { font-family: "Courier New", Courier, monospace; font-size: 12px; color: #7C877F; }
+  .hour-icon { font-size: 22px; margin: 4px 0; }
+  .hour-temp { font-size: 14px; font-weight: bold; }
+  .hour-precip { font-size: 11px; color: #4A7A6B; margin-top: 2px; }
   .btn {
     display: inline-block; margin-top: 12px;
     background: #23312C; color: #F3F1E7;
@@ -290,8 +305,6 @@
     return 'HTTP-Status ' + status + (xhr.statusText ? (' (' + xhr.statusText + ')') : '') + '.';
   }
 
-  var CORS_PROXY = 'https://api.allorigins.win/raw?url=';
-
   var CORS_PROXY_BUILDERS = [
     function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
     function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
@@ -301,6 +314,7 @@
   function xhrGet(url, onOk, onErr) {
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url, true);
+    xhr.timeout = 6000;
     xhr.onreadystatechange = function () {
       if (xhr.readyState === 4) {
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -312,29 +326,58 @@
       }
     };
     xhr.onerror = function () { onErr("Keine Verbindung: " + describeXhrFailure(xhr)); };
+    xhr.ontimeout = function () { onErr("Zeit\u00fcberschreitung (6s)."); };
     xhr.send();
   }
 
-  /* Versucht zuerst direkt, dann der Reihe nach mehrere CORS-Proxys, bis einer klappt.
-     So merkt man nicht nur, DASS ein Abruf scheitert, sondern die App repariert
-     sich in dem Fall automatisch selbst - kostenlose Proxys sind oft instabil. */
+  /* Merkt sich, welcher Weg (direkt oder welcher Proxy) beim letzten Mal
+     funktioniert hat, und probiert den beim naechsten Laden zuerst - spart
+     das wiederholte Warten auf Wege, die auf diesem Geraet ohnehin nie klappen. */
   function xhrGetJson(url, onOk, onFinalErr) {
+    var prefKey = 'mb_pref_weather';
+    var order = ['direct', 'p0', 'p1', 'p2'];
+    var pref = load(prefKey, null);
+    if (pref) { order = [pref].concat(order.filter(function (x) { return x !== pref; })); }
     var messages = [];
-    function tryProxy(index) {
-      if (index >= CORS_PROXY_BUILDERS.length) {
-        onFinalErr(messages.join(' | '));
-        return;
-      }
-      var proxied = CORS_PROXY_BUILDERS[index](url);
-      xhrGet(proxied, onOk, function (msg) {
-        messages.push('Proxy ' + (index + 1) + ': ' + msg);
-        tryProxy(index + 1);
+    function attempt(i) {
+      if (i >= order.length) { onFinalErr(messages.join(' | ')); return; }
+      var id = order[i];
+      var targetUrl = (id === 'direct') ? url : CORS_PROXY_BUILDERS[parseInt(id.substr(1), 10)](url);
+      xhrGet(targetUrl, function (data) {
+        save(prefKey, id);
+        onOk(data);
+      }, function (msg) {
+        messages.push(id + ': ' + msg);
+        attempt(i + 1);
       });
     }
-    xhrGet(url, onOk, function (directMsg) {
-      messages.push('Direkt: ' + directMsg);
-      tryProxy(0);
-    });
+    attempt(0);
+  }
+
+  function renderHourly(data) {
+    var h = data.hourly;
+    if (!h || !h.time) { return ''; }
+    var now = new Date();
+    var todayStr2 = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+    var html = '<div class="hourly-scroll">';
+    var shown = 0;
+    for (var i = 0; i < h.time.length && shown < 12; i++) {
+      var t = h.time[i]; // "YYYY-MM-DDTHH:MM"
+      var datePart = t.substr(0, 10);
+      var hour = parseInt(t.substr(11, 2), 10);
+      if (datePart !== todayStr2 || hour < now.getHours()) { continue; }
+      var info = describeCode(h.weathercode[i]);
+      var precip = (h.precipitation_probability && h.precipitation_probability[i] !== undefined) ? h.precipitation_probability[i] : null;
+      html += '<div class="hour-card">';
+      html += '<div class="hour-time">' + pad(hour) + ':00</div>';
+      html += '<div class="hour-icon">' + info[1] + '</div>';
+      html += '<div class="hour-temp">' + Math.round(h.temperature_2m[i]) + '\u00B0</div>';
+      if (precip !== null) { html += '<div class="hour-precip">' + precip + '%</div>'; }
+      html += '</div>';
+      shown++;
+    }
+    html += '</div>';
+    return shown > 0 ? html : '';
   }
 
   function renderWeather(data, placeName) {
@@ -354,6 +397,7 @@
     if (minT !== null && maxT !== null) { html += 'Heute: ' + minT + '\u00B0 / ' + maxT + '\u00B0 &middot; '; }
     html += 'Wind ' + Math.round(cw.windspeed) + ' km/h';
     html += '</div>';
+    html += renderHourly(data);
     weatherContent.innerHTML = html;
     weatherLoc.textContent = placeName ? ('Standort: ' + placeName) : '';
     weatherError.style.display = 'none';
@@ -362,7 +406,8 @@
   function fetchWeather(lat, lon, placeName) {
     weatherContent.innerHTML = '<p class="hint">Lade Wetterdaten&hellip;</p>';
     var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon +
-      '&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=auto';
+      '&current_weather=true&daily=temperature_2m_max,temperature_2m_min' +
+      '&hourly=temperature_2m,weathercode,precipitation_probability&timezone=auto';
     xhrGetJson(url, function (data) {
       renderWeather(data, placeName);
     }, function (msg) {
@@ -516,6 +561,25 @@
     xhr.send();
   }
 
+  /* Wie xhrGetJson, aber fuer reinen Text (ICS) und probiert direkt gleich die
+     Proxy-Kette durch, da die geheime iCal-Adresse ohnehin nie direkt (ohne
+     Proxy) abrufbar ist. */
+  function xhrGetTextViaProxies(rawUrl, onOk, onFinalErr) {
+    var messages = [];
+    function tryProxy(index) {
+      if (index >= CORS_PROXY_BUILDERS.length) {
+        onFinalErr(messages.join(' | '));
+        return;
+      }
+      var proxied = CORS_PROXY_BUILDERS[index](rawUrl);
+      xhrGetText(proxied, onOk, function (msg) {
+        messages.push('Proxy ' + (index + 1) + ': ' + msg);
+        tryProxy(index + 1);
+      });
+    }
+    tryProxy(0);
+  }
+
   function addDays(d, n) {
     var r = new Date(d.getTime());
     r.setDate(r.getDate() + n);
@@ -642,8 +706,7 @@
     var url = load('mb_gcal_url', null);
     if (!url) { return; }
     gcalStatus.textContent = 'Aktualisiere\u2026';
-    var proxied = CORS_PROXY + encodeURIComponent(url);
-    xhrGetText(proxied, function (text) {
+    xhrGetTextViaProxies(url, function (text) {
       try {
         var raw = parseICS(text);
         var today0 = new Date();
@@ -767,3 +830,7 @@
   setupList('mb_todos', 'todoList', 'todoInput', 'todoAdd');
   setupList('mb_shopping', 'shopList', 'shopInput', 'shopAdd');
 
+})();
+</script>
+</body>
+</html>
