@@ -282,6 +282,16 @@
     return WEATHER_CODES[code] || ["Unbekannt", "\u2753"];
   }
 
+  function describeXhrFailure(xhr) {
+    var status = xhr.status;
+    if (status === 0) {
+      return 'Status 0 \u2013 vermutlich CORS, Mixed-Content oder keine Netzwerkroute (der Browser verbirgt aus Sicherheitsgr\u00fcnden weitere Details).';
+    }
+    return 'HTTP-Status ' + status + (xhr.statusText ? (' (' + xhr.statusText + ')') : '') + '.';
+  }
+
+  var CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
   function xhrGet(url, onOk, onErr) {
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url, true);
@@ -289,14 +299,26 @@
       if (xhr.readyState === 4) {
         if (xhr.status >= 200 && xhr.status < 300) {
           try { onOk(JSON.parse(xhr.responseText)); }
-          catch (e) { onErr("Antwort konnte nicht gelesen werden."); }
+          catch (e) { onErr("Antwort konnte nicht gelesen werden (" + describeXhrFailure(xhr) + ")."); }
         } else {
-          onErr("Server antwortet nicht (Status " + xhr.status + ").");
+          onErr("Server antwortet nicht: " + describeXhrFailure(xhr));
         }
       }
     };
-    xhr.onerror = function () { onErr("Keine Verbindung zum Internet."); };
+    xhr.onerror = function () { onErr("Keine Verbindung: " + describeXhrFailure(xhr)); };
     xhr.send();
+  }
+
+  /* Versucht zuerst direkt, bei Fehlschlag automatisch ueber den CORS-Proxy.
+     So merkt man nicht nur, DASS ein direkter Abruf scheitert, sondern die
+     App repariert sich in dem Fall gleich selbst. */
+  function xhrGetJson(url, onOk, onFinalErr) {
+    xhrGet(url, onOk, function (directMsg) {
+      var proxied = CORS_PROXY + encodeURIComponent(url);
+      xhrGet(proxied, onOk, function (proxyMsg) {
+        onFinalErr('Direkt: ' + directMsg + ' | Ueber Proxy: ' + proxyMsg);
+      });
+    });
   }
 
   function renderWeather(data, placeName) {
@@ -325,7 +347,7 @@
     weatherContent.innerHTML = '<p class="hint">Lade Wetterdaten&hellip;</p>';
     var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon +
       '&current_weather=true&daily=temperature_2m_max,temperature_2m_min&timezone=auto';
-    xhrGet(url, function (data) {
+    xhrGetJson(url, function (data) {
       renderWeather(data, placeName);
     }, function (msg) {
       weatherContent.innerHTML = '<p class="hint">Wetter konnte nicht geladen werden.</p>';
@@ -337,7 +359,7 @@
   function geocodeAndFetch(name) {
     weatherContent.innerHTML = '<p class="hint">Suche Ort&hellip;</p>';
     var url = 'https://geocoding-api.open-meteo.com/v1/search?count=1&language=de&name=' + encodeURIComponent(name);
-    xhrGet(url, function (data) {
+    xhrGetJson(url, function (data) {
       if (data.results && data.results.length > 0) {
         var r = data.results[0];
         var label = r.name + (r.admin1 ? (', ' + r.admin1) : '') + (r.country ? (', ' + r.country) : '');
@@ -459,7 +481,6 @@
   }
 
   /* ---------------- Google Kalender (iCal) ---------------- */
-  var GCAL_PROXY = 'https://api.allorigins.win/raw?url=';
   var googleEvents = [];
   var gcalStatus = document.getElementById('gcalStatus');
   var gcalForm = document.getElementById('gcalForm');
@@ -472,10 +493,10 @@
     xhr.onreadystatechange = function () {
       if (xhr.readyState === 4) {
         if (xhr.status >= 200 && xhr.status < 300) { onOk(xhr.responseText); }
-        else { onErr('Kalender konnte nicht geladen werden (Status ' + xhr.status + ').'); }
+        else { onErr('Kalender konnte nicht geladen werden: ' + describeXhrFailure(xhr)); }
       }
     };
-    xhr.onerror = function () { onErr('Keine Verbindung zum Kalender-Proxy.'); };
+    xhr.onerror = function () { onErr('Keine Verbindung zum Kalender-Proxy: ' + describeXhrFailure(xhr)); };
     xhr.send();
   }
 
@@ -605,7 +626,7 @@
     var url = load('mb_gcal_url', null);
     if (!url) { return; }
     gcalStatus.textContent = 'Aktualisiere\u2026';
-    var proxied = GCAL_PROXY + encodeURIComponent(url);
+    var proxied = CORS_PROXY + encodeURIComponent(url);
     xhrGetText(proxied, function (text) {
       try {
         var raw = parseICS(text);
